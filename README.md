@@ -67,7 +67,7 @@ localStorage.clear(); location.reload();
 
 - Node/Express 后端 `shop-api`（端口 3002）
 - 服务器本地 JSON 数据文件
-- 自建服务器域名 `http://175.178.167.193`
+- 自建服务器域名 
 
 本 demo 版本：
 
