@@ -1,0 +1,3453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟商城 - 服装定制 v3 预览（Spine）</title>
+    <!-- 预加载 Spine 关键资源 -->
+    <link rel="preload" href="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/spine-webgl.js" as="script">
+    <link rel="preload" href="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/as.json" as="fetch" crossorigin>
+    <link rel="preload" href="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/as.atlas" as="fetch" crossorigin>
+    <link rel="preload" href="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/as.png" as="image" crossorigin>
+    <link rel="preload" href="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/as2.png" as="image" crossorigin>
+    <!-- v3.1: 去掉 Google Fonts CDN（国内会 ERR_TIMED_OUT），用系统字体栈 -->
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #684FA5;
+            --primary-light: #A288E3;
+            --panel-bg: rgba(255,255,255,.78);
+            --panel-border: rgba(255,255,255,.65);
+            --tab-idle: #efeaf8;
+            --tab-hover: #f7f4ff;
+            --tab-text: #5e5870;
+            --tab-active-text: #694fa6;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 24px;
+            position: relative;
+            min-height: 100vh;
+            width: 100%;
+            max-width: 1360px;
+            background: linear-gradient(180deg, #faf8ff 0%, #f4f1ff 100%);
+            font-family: 'Manrope', sans-serif;
+            overflow-x: hidden;
+            overflow-y: auto;
+            margin: 0 auto;
+        }
+
+        .main-canvas {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch; /* v2.4.1: 两栏等高 */
+            justify-content: center;
+            padding: 0;
+            gap: 24px;
+            width: 100%;
+            max-width: 1280px;
+        }
+
+        .left-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 20px 20px 16px; /* v2.4.1: 底部对齐右侧 .bottom-actions 的 16px */
+            width: 48%;
+            min-width: 400px;
+            max-width: 510px;
+            background: rgba(255,255,255,.78);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.65);
+            box-shadow: 0 20px 50px rgba(88, 66, 145, .08);
+            border-radius: 36px;
+            position: sticky;
+            top: 24px;
+            max-height: calc(100vh - 48px);
+            transition: background 0.3s ease;
+            overflow: visible;
+        }
+
+        .mount-status-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            color: #6f6781;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .mount-status-pill {
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(104,79,165,.08);
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        .avatar-container {
+            width: 100%;
+            flex: 1 1 380px;
+            min-height: 380px;
+            max-height: 520px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: max-height 0.3s ease, flex-basis 0.3s ease;
+        }
+
+        .avatar-container.maximized {
+            max-height: none;
+            flex: 1 1 0;
+            min-height: 0;
+        }
+
+        .avatar-stage {
+            width: auto;
+            height: 100%;
+            aspect-ratio: 360 / 380; /* v2.4.1: 保持原 360:380 比例 */
+            max-width: 100%;
+            border-radius: 28px;
+            background: radial-gradient(circle at center, rgba(255,255,255,.9) 0%, rgba(255,255,255,.45) 50%, rgba(255,255,255,0) 72%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .avatar-stack {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            margin: 0 auto;
+        }
+
+        .avatar-base {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none;
+        }
+
+        .mounted-item {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 180px;
+            max-width: none;
+            height: auto;
+            object-fit: contain;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            cursor: grab;
+            z-index: 4;
+            display: none;
+            user-select: none;
+            -webkit-user-drag: none;
+            filter: drop-shadow(0 10px 18px rgba(104,79,165,.16));
+            will-change: transform;
+        }
+
+        .mounted-item.active { display: block; }
+        .mounted-item.dragging { cursor: grabbing; }
+
+        .nav-buttons {
+            position: absolute;
+            right: 16px;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 5;
+        }
+
+        .nav-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.84);
+            box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.05);
+            backdrop-filter: blur(8px);
+            border-radius: 9999px;
+            border: none;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+
+        .nav-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 20px rgba(104,79,165,.12); }
+        .nav-btn svg { width: 20px; height: 18px; fill: #684FA5; }
+
+        /* v3: Spine 套装切换器 */
+        .skin-switcher {
+            position: absolute;
+            left: 16px;
+            top: 20px;
+            display: flex;
+            gap: 6px;
+            z-index: 5;
+            padding: 4px;
+            background: rgba(255, 255, 255, 0.84);
+            box-shadow: 0px 1px 2px rgba(0, 0, 0, 0.05);
+            backdrop-filter: blur(8px);
+            border-radius: 9999px;
+        }
+        .skin-btn {
+            min-width: 40px;
+            height: 32px;
+            padding: 0 12px;
+            border: none;
+            border-radius: 9999px;
+            background: transparent;
+            color: #684FA5;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+        .skin-btn:hover { background: rgba(104,79,165,.10); }
+        .skin-btn.active { background: #684FA5; color: white; }
+
+        .selected-product-card, .mount-tuner, .color-slider {
+            width: 100%;
+            max-width: 420px;
+            background: rgba(255,255,255,.72);
+            border: 1px solid rgba(255,255,255,.55);
+            box-shadow: 0px 1px 2px rgba(0,0,0,.05);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+        }
+
+        .selected-product-card {
+            margin-top: 10px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .selected-product-label {
+            font-size: 11px;
+            color: #8b82a3;
+            font-weight: 700;
+        }
+
+        .selected-product-name {
+            font-size: 16px;
+            color: #494551;
+            font-weight: 800;
+        }
+
+        .mount-tuner {
+            margin-top: auto;
+            padding: 12px 14px;
+            display: grid;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .mount-tuner-body {
+            display: none;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .mount-tuner.expanded .mount-tuner-body {
+            display: grid;
+        }
+
+        .mount-tuner-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--primary);
+            font-weight: 800;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tuner-toggle-icon {
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .mount-tuner.expanded .tuner-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .tuner-row {
+            display: grid;
+            grid-template-columns: 44px 1fr 48px;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .tuner-row label {
+            color: #494551;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .tuner-row input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
+        }
+
+        .tuner-row span {
+            text-align: right;
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .mount-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .mini-btn {
+            flex: 1;
+            border: none;
+            border-radius: 999px;
+            padding: 10px 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+
+        .mini-btn.primary {
+            color: white;
+            background: linear-gradient(135deg, #7458b8 0%, #a98be8 100%);
+            box-shadow: 0 12px 28px rgba(116,88,184,.20);
+        }
+
+        .mini-btn.secondary {
+            background: white;
+            color: #494551;
+            border: 1px solid rgba(105,79,166,.12);
+        }
+
+        .color-slider {
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            gap: 8px;
+            margin-top: 10px; /* v2.4.1: 恢复原 10px 间距（推底逻辑由 .mount-tuner 负责） */
+            flex-shrink: 0;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .slider-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slider-title svg {
+            width: 17.5px;
+            height: 17.5px;
+            fill: #684FA5;
+        }
+
+        .slider-title span {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            line-height: 24px;
+            color: #494551;
+        }
+
+        .slider-value {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 700;
+            font-size: 12px;
+            line-height: 16px;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: #684FA5;
+        }
+
+        .slider-track {
+            width: 100%;
+            height: 12px;
+            background: linear-gradient(90deg, #FFD9E2 0%, #EADDFF 25%, #D0BCFF 50%, #B0E0E6 75%, #FFD9E2 100%);
+            border-radius: 9999px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .slider-thumb {
+            position: absolute;
+            height: 24px;
+            width: 24px;
+            top: calc(50% - 12px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FFFFFF;
+            border: 4px solid #684FA5;
+            border-radius: 9999px;
+            box-shadow: 0px 10px 15px -3px rgba(0, 0, 0, 0.1), 0px 4px 6px -4px rgba(0, 0, 0, 0.1);
+            cursor: grab;
+            z-index: 10;
+        }
+
+        .slider-colors {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 4px;
+            width: 100%;
+        }
+
+        .slider-color-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .slider-color-dot:hover { box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.15); }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0;
+            width: 52%;
+            min-width: 420px;
+            max-width: 560px;
+            /* v2.4.1: 改为 CSS 自然等高（由 .main-canvas align-items:stretch 驱动） */
+            max-height: calc(100vh - 48px);
+            overflow: hidden;
+            background: rgba(255,255,255,.78);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.65);
+            box-shadow: 0 20px 50px rgba(88, 66, 145, .08);
+            border-radius: 36px;
+        }
+
+        /* v3.1: 流水明细 modal（复用 .bag-modal 外壳） */
+        .txn-filter-tabs {
+            display: flex;
+            gap: 8px;
+            padding: 12px 24px;
+        }
+        .txn-filter-tab {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid rgba(105,79,166,.12);
+            border-radius: 999px;
+            background: white;
+            color: #6f6781;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+        .txn-filter-tab:hover { border-color: rgba(105,79,166,.32); }
+        .txn-filter-tab.active {
+            background: linear-gradient(135deg, #7458b8 0%, #a98be8 100%);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 6px 12px rgba(116,88,184,.18);
+        }
+        .txn-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 4px;
+        }
+        .txn-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 10px;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.78);
+            border: 1px solid rgba(255,255,255,.55);
+            border-radius: 14px;
+            box-shadow: 0 1px 2px rgba(0,0,0,.04);
+        }
+        .txn-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .txn-desc { font-size: 14px; font-weight: 700; color: #494551; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .txn-time { font-size: 11px; color: #8b82a3; }
+        .txn-amount { font-size: 15px; font-weight: 800; min-width: 60px; text-align: right; }
+        .txn-amount.positive { color: #2e9e6a; }
+        .txn-amount.negative { color: #d04a52; }
+        .txn-balance { font-size: 11px; color: #8b82a3; min-width: 56px; text-align: right; }
+
+        .category-tabs {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            padding: 12px;
+            gap: 8px;
+            width: 100%;
+            min-height: 98px;
+            background: #f4f1fb;
+            border-bottom: 1px solid rgba(105,79,166,.08);
+            border-radius: 36px 36px 0 0;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .tab-btn {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex: 1;
+            min-height: 72px;
+            padding: 12px 10px;
+            background: var(--tab-idle);
+            color: var(--tab-text);
+            border: 1px solid transparent;
+            border-radius: 22px;
+            cursor: pointer;
+            transition: background .22s ease, border-color .22s ease, box-shadow .22s ease, transform .14s ease;
+        }
+
+        .tab-btn:hover {
+            transform: translateY(-2px);
+            background: var(--tab-hover);
+            box-shadow: 0 10px 20px rgba(104,79,165,.08);
+        }
+
+        .tab-btn:active { transform: scale(.98); }
+
+        .tab-btn.active {
+            background: white;
+            border-color: rgba(104,79,165,.16);
+            color: var(--tab-active-text);
+            box-shadow: 0 12px 22px rgba(105,79,166,.10);
+        }
+
+        .tab-btn.active::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: 8px;
+            transform: translateX(-50%);
+            width: 26px;
+            height: 4px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #684FA5 0%, #A288E3 100%);
+        }
+
+        .tab-icon-wrap {
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(104,79,165,.06);
+            transition: background .22s ease, transform .22s ease;
+        }
+
+        .tab-btn.active .tab-icon-wrap {
+            background: rgba(104,79,165,.12);
+            transform: translateY(-1px);
+        }
+
+        .tab-btn img, .tab-btn svg {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+            transition: filter .22s ease, transform .22s ease;
+        }
+
+        .tab-btn.active img { filter: none; }
+        .tab-btn:not(.active) img { filter: grayscale(100%) opacity(0.65); }
+
+        .tab-btn span {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 800;
+            font-size: 14px;
+            letter-spacing: 0.2px;
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .style-grid {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 18px;
+            width: 100%;
+            flex: 1;
+            overflow-y: auto;
+            min-height: 300px;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            width: 100%;
+        }
+
+        .item-card {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 14px;
+            gap: 8px;
+            background: white;
+            border: 1px solid rgba(110, 92, 155, .10);
+            box-shadow: 0 8px 20px rgba(0,0,0,.03);
+            border-radius: 24px;
+            cursor: pointer;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+            position: relative;
+        }
+
+        .item-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 26px rgba(105,79,166,.08);
+        }
+
+        .item-card.selected {
+            border-color: #7e62c5;
+            box-shadow: 0 0 0 2px rgba(126,98,197,.12) inset, 0 14px 24px rgba(105,79,166,.10);
+        }
+
+        .item-image {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(180deg, #f7f5fb 0%, #ece7f7 100%);
+            border-radius: 18px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .item-image img {
+            height: 100%;
+            width: auto;
+            object-fit: contain;
+            object-position: center center;
+            padding: 8px;
+        }
+
+        .item-image svg {
+            width: 50px;
+            height: 50px;
+            fill: #CBC4D2;
+            margin: auto;
+        }
+
+        .item-favorite {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            right: 10px;
+            top: 10px;
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 9999px;
+            cursor: pointer;
+            font-size: 14px;
+            border: none;
+        }
+
+        .item-favorite svg {
+            width: 12px;
+            height: 11px;
+            fill: #964261;
+            transition: fill 0.2s;
+        }
+
+        .item-favorite.active svg { fill: #EAB308; }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 8px 0 0;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .item-name {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 800;
+            font-size: 16px;
+            line-height: 18px;
+            color: #1A1B21;
+        }
+
+        .item-tag {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 8px;
+            background: #ece2ff;
+            color: #694fa6;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        /* v2.4.1: 已购买标签 */
+        .item-tag.purchased-tag {
+            background: #d8f3dc;
+            color: #2d6a4f;
+        }
+
+        /* v2.4.1: 已购买商品卡片状态 */
+        .item-card.purchased .item-image img {
+            filter: saturate(.75);
+            opacity: .82;
+        }
+        .item-card.purchased .purchased-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 4px 10px;
+            background: rgba(45,106,79,.92);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 800;
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .item-price-row {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        .item-price {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 900;
+        }
+
+        .item-price .price-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .item-price.gold .price-icon {
+            filter: brightness(0) saturate(100%) invert(64%) sepia(93%) saturate(528%) hue-rotate(5deg) brightness(96%) contrast(95%);
+        }
+
+        .item-price.gems .price-icon {
+            filter: brightness(0) saturate(100%) invert(45%) sepia(84%) saturate(362%) hue-rotate(288deg) brightness(92%) contrast(91%);
+        }
+
+        .item-price span {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 700;
+            font-size: 12px;
+            line-height: 16px;
+            color: #1A1B21;
+        }
+
+        .bottom-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 14px 18px 16px;
+            gap: 10px;
+            width: 100%;
+            height: auto;
+            background: #f4f1fb;
+            border-top: 1px solid rgba(105,79,166,.08);
+            border-radius: 0 0 36px 36px;
+            flex-shrink: 0;
+        }
+
+        .apply-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 14px 18px;
+            gap: 8px;
+            width: 100%;
+            background: linear-gradient(135deg, #7458b8 0%, #a98be8 100%);
+            box-shadow: 0 12px 28px rgba(116,88,184,.22);
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+
+        .apply-btn:hover { transform: translateY(-1px); box-shadow: 0 16px 32px rgba(116,88,184,.28); }
+        .apply-btn svg { width: 24px; height: 24px; fill: #FFFFFF; }
+        .apply-btn span {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            line-height: 24px;
+            color: #FFFFFF;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .action-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px 18px;
+            width: 50%;
+            background: #FFFFFF;
+            border: 1px solid rgba(105,79,166,.12);
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 900;
+            transition: .15s ease;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(105,79,166,.22);
+            box-shadow: 0 10px 20px rgba(105,79,166,.06);
+        }
+
+        .action-btn span {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 20px;
+            color: #494551;
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%) translateY(18px);
+            background: rgba(36, 31, 51, 0.92);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 800;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .22s ease, transform .22s ease;
+            z-index: 999;
+        }
+
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        @media (max-height: 900px) {
+            .avatar-container { min-height: 260px; max-height: 320px; }
+        }
+
+        @media (max-width: 1080px) {
+            .main-canvas {
+                flex-direction: column;
+                align-items: center;
+            }
+            .left-section { position: static; width: 100%; min-width: unset; }
+            .right-panel { width: 100%; min-width: unset; }
+        }
+
+        @media (max-width: 720px) {
+            body { padding: 12px; }
+            .category-tabs { flex-wrap: wrap; min-height: auto; }
+            .tab-btn { min-width: calc(50% - 4px); flex: 0 0 calc(50% - 4px); }
+            .grid-container { grid-template-columns: 1fr; }
+            .action-buttons { flex-direction: column; }
+            .action-btn { width: 100%; }
+            .left-section, .right-panel { min-height: auto; }
+            .style-grid { min-height: auto; max-height: 60vh; }
+            .avatar-container { height: 440px; }
+        }
+
+        /* v2.5: 性别选择弹窗 */
+        .gender-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(73, 69, 81, 0.55);
+            backdrop-filter: blur(10px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1100;
+        }
+        .gender-modal.show { display: flex; }
+        .gender-modal-content {
+            width: 420px;
+            max-width: 92vw;
+            background: #fff;
+            border-radius: 28px;
+            padding: 32px 28px 24px;
+            box-shadow: 0 30px 60px rgba(88,66,145,.18);
+            text-align: center;
+        }
+        .gender-modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #3b3247;
+            margin-bottom: 6px;
+        }
+        .gender-modal-subtitle {
+            font-size: 13px;
+            color: #8b82a0;
+            margin-bottom: 24px;
+        }
+        .gender-options {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+        }
+        .gender-card {
+            flex: 1;
+            padding: 20px 12px 18px;
+            background: #f7f4ff;
+            border: 2px solid transparent;
+            border-radius: 22px;
+            cursor: pointer;
+            transition: transform .18s ease, border-color .18s ease, background .18s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .gender-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(126,98,197,.35);
+            background: #efe8ff;
+        }
+        .gender-card.selected {
+            border-color: #7e62c5;
+            background: #efe8ff;
+            box-shadow: 0 12px 24px rgba(126,98,197,.15);
+        }
+        .gender-card-avatar {
+            width: 92px;
+            height: 108px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #fff 0%, #ece7f7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .gender-card-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .gender-card-avatar svg {
+            width: 54px;
+            height: 54px;
+            fill: #9785c2;
+        }
+        .gender-card-label {
+            font-size: 14px;
+            font-weight: 700;
+            color: #3b3247;
+        }
+        .gender-card-hint {
+            font-size: 11px;
+            color: #8b82a0;
+        }
+        .gender-modal-footer {
+            margin-top: 22px;
+            display: flex;
+            justify-content: center;
+        }
+        .gender-confirm-btn {
+            padding: 12px 34px;
+            background: linear-gradient(135deg, #7458b8 0%, #a98be8 100%);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(116,88,184,.22);
+        }
+        .gender-confirm-btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* v2.5: 左面板"切换性别"小按钮 */
+        .gender-switch-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: rgba(126,98,197,.1);
+            color: #694fa6;
+            border: 1px solid rgba(126,98,197,.2);
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .18s ease;
+        }
+        .gender-switch-btn:hover { background: rgba(126,98,197,.18); }
+
+        /* v2.5: 男生占位角色图 */
+        .avatar-placeholder-male {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #dce7ff 0%, #b5c7ee 100%);
+            border-radius: inherit;
+        }
+        .avatar-placeholder-male svg {
+            width: 46%;
+            height: 46%;
+            fill: #6b83b8;
+            opacity: .7;
+        }
+
+        /* 购买确认弹窗 */
+        .purchase-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(73, 69, 81, 0.5);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .purchase-modal.show {
+            display: flex;
+        }
+
+        .purchase-modal-content {
+            display: flex;
+            flex-direction: column;
+            width: 360px;
+            max-width: 90vw;
+            background: #FFFFFF;
+            border-radius: 24px;
+            box-shadow: 0px 40px 80px -20px rgba(73, 69, 81, 0.3);
+            overflow: hidden;
+        }
+
+        .purchase-modal-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: #F4F3FB;
+        }
+
+        .purchase-modal-header h3 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+            color: #494551;
+        }
+
+        .purchase-modal-body {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 16px;
+        }
+
+        .purchase-product-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #F4F3FB;
+            border-radius: 16px;
+        }
+
+        .purchase-product-info img {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 12px;
+            background: white;
+        }
+
+        .purchase-product-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .purchase-product-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: #494551;
+        }
+
+        .purchase-product-price {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 800;
+            font-size: 13px;
+            color: #684FA5;
+        }
+
+        .purchase-product-price img {
+            width: 14px;
+            height: 14px;
+        }
+
+        .purchase-confirm-text {
+            text-align: center;
+            font-size: 14px;
+            color: #6f6781;
+        }
+
+        .purchase-modal-footer {
+            display: flex;
+            gap: 12px;
+            padding: 16px 20px 20px;
+        }
+
+        .purchase-btn {
+            flex: 1;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .purchase-btn.cancel {
+            background: #F4F3FB;
+            color: #494551;
+        }
+
+        .purchase-btn.cancel:hover {
+            background: #EEEDF5;
+        }
+
+        .purchase-btn.confirm {
+            background: linear-gradient(135deg, #684FA5 0%, #A288E3 100%);
+            color: white;
+            box-shadow: 0px 10px 15px -3px rgba(104, 79, 165, 0.2);
+        }
+
+        .purchase-btn.confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0px 14px 20px -3px rgba(104, 79, 165, 0.3);
+        }
+
+        /* 规则说明弹窗 */
+        .rules-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(73, 69, 81, 0.5);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .rules-modal.show { display: flex; }
+        .rules-modal-content {
+            width: 520px;
+            max-width: 90vw;
+            max-height: 80vh;
+            background: #fff;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 40px 80px rgba(73,69,81,.3);
+        }
+        .rules-modal-header {
+            padding: 20px 24px;
+            background: #F4F3FB;
+            border-bottom: 1px solid rgba(105,79,166,.08);
+        }
+        .rules-modal-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #494551;
+            margin: 0;
+        }
+        .rules-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            max-height: calc(80vh - 120px);
+        }
+        .rules-section {
+            margin-bottom: 20px;
+        }
+        .rules-section:last-child {
+            margin-bottom: 0;
+        }
+        .rules-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #3b3247;
+            margin-bottom: 10px;
+        }
+        .rules-text {
+            font-size: 14px;
+            line-height: 1.7;
+            color: #6f6781;
+            margin-bottom: 8px;
+        }
+        .rules-text:last-child {
+            margin-bottom: 0;
+        }
+        .rules-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid rgba(105,79,166,.08);
+            display: flex;
+            justify-content: center;
+        }
+        .rules-close-btn {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #7458b8 0%, #a98be8 100%);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(116,88,184,.22);
+            transition: .18s ease;
+        }
+        .rules-close-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(116,88,184,.28);
+        }
+
+        /* v3.0: 背包弹窗样式 */
+        .bag-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(73, 69, 81, 0.5);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .bag-modal.show { display: flex; }
+
+        .bag-modal-content {
+            display: flex;
+            flex-direction: column;
+            width: 480px;
+            max-width: 90vw;
+            max-height: 80vh;
+            background: #FFFFFF;
+            border-radius: 24px;
+            box-shadow: 0px 40px 80px -20px rgba(73, 69, 81, 0.3);
+            overflow: hidden;
+        }
+
+        .bag-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: #F4F3FB;
+            border-bottom: 1px solid rgba(105,79,166,.08);
+        }
+
+        .bag-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bag-header-title svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .bag-header-title h3 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+            color: #494551;
+            margin: 0;
+        }
+
+        .bag-close-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(104,79,165,.08);
+            color: #684FA5;
+            font-size: 18px;
+            cursor: pointer;
+            transition: .18s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .bag-close-btn:hover { background: rgba(104,79,165,.16); }
+
+        .bag-stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #f7f4ff 0%, #f4f1fb 100%);
+        }
+
+        .bag-stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #8b82a3;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            color: #684FA5;
+            font-weight: 800;
+        }
+
+        .bag-modal-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            min-height: 200px;
+        }
+
+        .bag-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #CBC4D2;
+            text-align: center;
+        }
+
+        .bag-empty svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            fill: #CBC4D2;
+        }
+
+        .bag-empty p {
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .bag-items-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .bag-item-card {
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            background: #F4F3FB;
+            border: 1px solid rgba(105,79,166,.08);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: .18s ease;
+        }
+
+        .bag-item-card:hover {
+            transform: translateY(-2px);
+            border-color: #A288E3;
+            box-shadow: 0 8px 16px rgba(104,79,165,.10);
+        }
+
+        .bag-item-card.selected {
+            border-color: #684FA5;
+            box-shadow: 0 0 0 2px rgba(104,79,165,.12);
+        }
+
+        .bag-item-image {
+            width: 100%;
+            height: 80px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #f7f5fb 0%, #ece7f7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .bag-item-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .bag-item-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #494551;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .bag-item-meta {
+            font-size: 11px;
+            color: #8b82a3;
+            margin-top: 4px;
+            text-align: center;
+        }
+
+        .bag-item-expiry {
+            font-size: 11px;
+            color: #2e9e6a;
+            margin-top: 2px;
+            text-align: center;
+        }
+
+        .bag-item-card.expired {
+            opacity: .55;
+        }
+
+        .bag-item-card.expired .bag-item-expiry {
+            color: #d04a52;
+        }
+
+        .bag-section-title {
+            grid-column: 1 / -1;
+            font-size: 12px;
+            font-weight: 800;
+            color: #8b82a3;
+            padding: 4px 0 8px;
+            letter-spacing: .5px;
+        }
+
+        .item-expiry-badge {
+            font-size: 11px;
+            color: #2e9e6a;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .item-expiry-badge.expired-badge {
+            color: #d04a52;
+        }
+
+        .bag-modal-footer {
+            display: flex;
+            gap: 12px;
+            padding: 16px 20px 20px;
+            border-top: 1px solid rgba(105,79,166,.08);
+        }
+
+        .bag-btn {
+            flex: 1;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .bag-btn.primary {
+            background: linear-gradient(135deg, #684FA5 0%, #A288E3 100%);
+            color: white;
+            box-shadow: 0px 10px 15px -3px rgba(104, 79, 165, 0.2);
+        }
+
+        .bag-btn.primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0px 14px 20px -3px rgba(104, 79, 165, 0.3);
+        }
+
+        .bag-btn.secondary {
+            background: #F4F3FB;
+            color: #494551;
+        }
+
+        .bag-btn.secondary:hover {
+            background: rgba(104,79,165,.08);
+        }
+    </style>
+</head>
+<body>
+    <main class="main-canvas">
+        <section class="left-section" id="leftSection">
+            <div class="mount-status-bar">
+                <div>角色挂载预览</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="gender-switch-btn" id="genderSwitchBtn" type="button" title="切换性别">
+                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;"><path d="M17.5 7h-3v2h1.54l-2.01 2.01C13.56 10.38 12.33 10 11 10c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6c0-1.33-.38-2.56-1.01-3.56L18 10.42V12h2V7h-2.5zM11 20c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
+                        <span id="genderSwitchLabel">切换性别</span>
+                    </button>
+                    <div class="mount-status-pill" id="mountStatusPill">未挂载</div>
+                </div>
+            </div>
+
+            <div class="avatar-container maximized" id="avatarContainer">
+                <!-- v3: Spine 套装切换器（开发调试用，正式版隐藏；点击商品会自动切 skin） -->
+                <div class="skin-switcher" id="skinSwitcher" style="display:none;">
+                    <button class="skin-btn active" data-skin="tzA" type="button">tzA</button>
+                    <button class="skin-btn" data-skin="tzB" type="button">tzB</button>
+                    <button class="skin-btn" data-skin="tzC" type="button">tzC</button>
+                    <button class="skin-btn" data-skin="tzD" type="button">tzD</button>
+                </div>
+                <div class="avatar-stage">
+                    <div class="avatar-stack" id="avatarStack">
+                        <!-- v3: Spine WebGL canvas 替代静态 PNG（fallback img 在 Spine 加载失败时显示） -->
+                        <canvas class="avatar-base" id="avatarStage"></canvas>
+                        <img class="avatar-base avatar-base-fallback" id="avatarBase" src="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/images/乖乖.png" alt="Avatar Preview" style="display:none;">
+                        <!-- v2.5: 男生占位图（选择男生时显示） -->
+                        <div class="avatar-placeholder-male" id="avatarPlaceholderMale" style="display:none;">
+                            <svg viewBox="0 0 24 24"><path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg>
+                        </div>
+                        <img class="mounted-item" id="mountedItem" alt="Mounted Product">
+                    </div>
+                </div>
+
+                <div class="nav-buttons">
+                    <!-- v3.0: 我的背包按钮 -->
+                    <button class="nav-btn" id="myBagBtn" title="我的背包">
+                        <svg viewBox="0 0 1024 1024" style="width:20px;height:20px;">
+                            <path d="M513.37728 90.73664c-71.7056 0-129.83808 58.12736-129.83808 129.83808 0 71.7056 58.12736 129.83808 129.83808 129.83808 71.7056 0 129.83808-58.12736 129.83808-129.83808-0.00512-71.71072-58.13248-129.83808-129.83808-129.83808z m0 236.57984c-58.95168 0-106.74688-47.79008-106.74688-106.74688 0-58.95168 47.79008-106.74688 106.74688-106.74688 58.95168 0 106.74688 47.79008 106.74688 106.74688-0.00512 58.9568-47.7952 106.74688-106.74688 106.74688z" fill="#684FA5"/>
+                            <path d="M692.72576 927.9488H334.02368c-57.35424 0-104.27904-46.9248-104.27904-104.27904V488.35584c0-155.60192 127.31392-282.91584 282.91584-282.91584 156.3904 0 284.34432 127.95392 284.34432 284.34432v333.88544c0 57.35424-46.9248 104.27904-104.27904 104.27904z" fill="#684FA5"/>
+                            <path d="M575.0784 490.0608H455.6544c-23.53664 0-42.79296-19.25632-42.79296-42.79296s19.25632-42.79296 42.79296-42.79296h119.424c23.53664 0 42.79296 19.25632 42.79296 42.79296s-19.25632 42.79296-42.79296 42.79296z" fill="#684FA5"/>
+                        </svg>
+                    </button>
+                    <button class="nav-btn" id="rulesBtn" title="金币规则说明">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    </button>
+                    <button class="nav-btn" id="clearMountBtn" title="清空挂载">
+                        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mount-tuner">
+                <div class="mount-tuner-title" id="mountTunerToggle">
+                    <span>挂载微调</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span id="mountSavedText">未保存</span>
+                        <span class="tuner-toggle-icon">▲</span>
+                    </div>
+                </div>
+
+                <div class="mount-tuner-body">
+
+                <div class="tuner-row">
+                    <label for="mountXRange">X</label>
+                    <input type="range" id="mountXRange" min="-200" max="200" value="0">
+                    <span id="mountXValue">0</span>
+                </div>
+
+                <div class="tuner-row">
+                    <label for="mountYRange">Y</label>
+                    <input type="range" id="mountYRange" min="-260" max="260" value="0">
+                    <span id="mountYValue">0</span>
+                </div>
+
+                <div class="tuner-row">
+                    <label for="mountScaleRange">缩放</label>
+                    <input type="range" id="mountScaleRange" min="30" max="220" value="100">
+                    <span id="mountScaleValue">100%</span>
+                </div>
+
+                <!-- v2.1: 新增旋转控制 -->
+                <div class="tuner-row">
+                    <label for="mountRotationRange">旋转</label>
+                    <input type="range" id="mountRotationRange" min="-180" max="180" value="0">
+                    <span id="mountRotationValue">0°</span>
+                </div>
+
+                <!-- v2.1: 新增层级控制 -->
+                <div class="tuner-row">
+                    <label for="mountZIndexRange">层级</label>
+                    <input type="range" id="mountZIndexRange" min="10" max="300" value="100">
+                    <span id="mountZIndexValue">100</span>
+                </div>
+
+                <!-- v2.1: 新增槽位选择 -->
+                <div class="tuner-row">
+                    <label for="mountSlotSelect">槽位</label>
+                    <select id="mountSlotSelect" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(105,79,166,.12);background:#f7f4ff;color:#494551;font-size:12px;">
+                        <option value="dress">礼服</option>
+                        <option value="top">上衣</option>
+                        <option value="bottom">下装</option>
+                        <option value="shoes">鞋子</option>
+                        <option value="accessory-head">头饰</option>
+                        <option value="accessory-face">面部配饰</option>
+                        <option value="accessory-hand">手持道具</option>
+                        <option value="accessory-back">背部挂件</option>
+                        <option value="accessory-neck">颈部配饰</option>
+                        <option value="effect">特效层</option>
+                        <option value="background">背景</option>
+                    </select>
+                    <span id="mountSlotValue">-</span>
+                </div>
+
+                <div class="mount-actions">
+                    <button class="mini-btn primary" id="saveMountBtn">保存挂载</button>
+                    <button class="mini-btn secondary" id="resetMountBtn">重置微调</button>
+                </div>
+                </div><!-- /mount-tuner-body -->
+            </div>
+
+            <div class="color-slider">
+                <div class="slider-header">
+                    <div class="slider-title">
+                        <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8z"/></svg>
+                        <span>背景色</span>
+                    </div>
+                    <span class="slider-value">#D0BCFF</span>
+                </div>
+                <div class="slider-track">
+                    <div class="slider-thumb"></div>
+                </div>
+                <div class="slider-colors">
+                    <div class="slider-color-dot"></div>
+                    <div class="slider-color-dot"></div>
+                    <div class="slider-color-dot"></div>
+                    <div class="slider-color-dot"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="right-panel">
+            <div class="category-tabs" id="categoryTabsContainer"></div>
+
+            <div class="style-grid">
+                <div class="grid-container" id="productGridContainer"></div>
+            </div>
+
+            <div class="bottom-actions">
+                <button class="apply-btn" id="applyToAvatarBtn">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    <span>应用到角色</span>
+                </button>
+                <div class="action-buttons">
+                    <button class="action-btn" id="resetLookBtn">
+                        <span>重置</span>
+                    </button>
+                    <button class="action-btn" id="saveLookBtn">
+                        <span>购买</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- v2.5: 性别选择弹窗 -->
+    <div class="gender-modal" id="genderModal">
+        <div class="gender-modal-content">
+            <div class="gender-modal-title">选择你的角色</div>
+            <div class="gender-modal-subtitle">首次进入商城，请选择你的性别</div>
+            <div class="gender-options">
+                <div class="gender-card" data-gender="female">
+                    <div class="gender-card-avatar">
+                        <img src="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/images/乖乖.png" alt="女生">
+                    </div>
+                    <div class="gender-card-label">女生</div>
+                    <div class="gender-card-hint">使用现有角色形象</div>
+                </div>
+                <div class="gender-card" data-gender="male">
+                    <div class="gender-card-avatar">
+                        <svg viewBox="0 0 24 24"><path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg>
+                    </div>
+                    <div class="gender-card-label">男生</div>
+                    <div class="gender-card-hint">角色形象开发中</div>
+                </div>
+            </div>
+            <div class="gender-modal-footer">
+                <button class="gender-confirm-btn" id="genderConfirmBtn" disabled>确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 金币规则说明弹窗 -->
+    <div class="rules-modal" id="rulesModal">
+        <div class="rules-modal-content">
+            <div class="rules-modal-header">
+                <h3>什么是金币？</h3>
+            </div>
+            <div class="rules-modal-body">
+                <div class="rules-section">
+                    <div class="rules-title">1. 什么是金币？</div>
+                    <div class="rules-text">金币是鼓励小朋友努力学习的一种积分奖励，通过上课、参与游乐园任务等活动获得，可以用于购买道具或一些其他虚拟商品。</div>
+                    <div class="rules-text">（1）金币不是现金也不是代金券，不支持兑换现金。</div>
+                    <div class="rules-text">（2）金币和星星是两个独立的体系，金币可以在商城兑换成星星，星星不可兑换成金币。</div>
+                    <div class="rules-text">（3）金币的规则将随业务发展逐步完善，以发布的最新版本为准。</div>
+                </div>
+                <div class="rules-section">
+                    <div class="rules-title">2. 金币的有效期是多久？</div>
+                    <div class="rules-text">目前星星暂时不支持实物资产兑换，因此暂时未设置有效期。如果有用途上的变化，会公示相关有效期规则。</div>
+                </div>
+                <div class="rules-section">
+                    <div class="rules-title">3. 如何获取更多金币？</div>
+                    <div class="rules-text">认真完成预习、积极参与直播互动、完成作业任务均可获得不同数量的金币。</div>
+                </div>
+            </div>
+            <div class="rules-modal-footer">
+                <button class="rules-close-btn" id="rulesCloseBtn">我知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 购买确认弹窗 -->
+    <div class="purchase-modal" id="purchaseModal">
+        <div class="purchase-modal-content">
+            <div class="purchase-modal-header">
+                <h3>确认购买</h3>
+            </div>
+            <div class="purchase-modal-body">
+                <div class="purchase-product-info" id="purchaseProductInfo">
+                    <img id="purchaseProductImg" src="" alt="">
+                    <div class="purchase-product-details">
+                        <div class="purchase-product-name" id="purchaseProductName"></div>
+                        <div class="purchase-product-price" id="purchaseProductPrice"></div>
+                    </div>
+                </div>
+                <p class="purchase-confirm-text">确认购买此商品？</p>
+            </div>
+            <div class="purchase-modal-footer">
+                <button class="purchase-btn cancel" id="purchaseCancelBtn">取消</button>
+                <button class="purchase-btn confirm" id="purchaseConfirmBtn">确认购买</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- v3.0: 背包弹窗 -->
+    <div class="bag-modal" id="bagModal">
+        <div class="bag-modal-content">
+            <div class="bag-modal-header">
+                <div class="bag-header-title">
+                    <svg viewBox="0 0 1024 1024">
+                        <path d="M513.37728 90.73664c-71.7056 0-129.83808 58.12736-129.83808 129.83808 0 71.7056 58.12736 129.83808 129.83808 129.83808 71.7056 0 129.83808-58.12736 129.83808-129.83808-0.00512-71.71072-58.13248-129.83808-129.83808-129.83808z m0 236.57984c-58.95168 0-106.74688-47.79008-106.74688-106.74688 0-58.95168 47.79008-106.74688 106.74688-106.74688 58.95168 0 106.74688 47.79008 106.74688 106.74688-0.00512 58.9568-47.7952 106.74688-106.74688 106.74688z" fill="#684FA5"/>
+                        <path d="M692.72576 927.9488H334.02368c-57.35424 0-104.27904-46.9248-104.27904-104.27904V488.35584c0-155.60192 127.31392-282.91584 282.91584-282.91584 156.3904 0 284.34432 127.95392 284.34432 284.34432v333.88544c0 57.35424-46.9248 104.27904-104.27904 104.27904z" fill="#684FA5"/>
+                        <path d="M575.0784 490.0608H455.6544c-23.53664 0-42.79296-19.25632-42.79296-42.79296s19.25632-42.79296 42.79296-42.79296h119.424c23.53664 0 42.79296 19.25632 42.79296 42.79296s-19.25632 42.79296-42.79296 42.79296z" fill="#684FA5"/>
+                    </svg>
+                    <h3>我的背包</h3>
+                </div>
+                <button class="bag-close-btn" id="bagCloseBtn">×</button>
+            </div>
+
+            <div class="bag-stats">
+                <div class="bag-stat-item">
+                    <span class="stat-label">金币余额</span>
+                    <span class="stat-value" id="bagGoldBalance">0</span>
+                </div>
+                <div class="bag-stat-item">
+                    <span class="stat-label">已购商品</span>
+                    <span class="stat-value" id="bagItemCount">0</span>
+                </div>
+                <div class="bag-stat-item">
+                    <span class="stat-label">已过期商品</span>
+                    <span class="stat-value" id="bagExpiredCount" style="color:#d04a52;">0</span>
+                </div>
+            </div>
+
+            <div class="bag-modal-body">
+                <div class="bag-empty" id="bagEmpty">
+                    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                    <p>背包空空如也<br>快去商城选购心仪的商品吧</p>
+                </div>
+                <div class="bag-items-grid" id="bagItemsGrid"></div>
+            </div>
+
+            <div class="bag-modal-footer">
+                <button class="bag-btn primary" id="applyFromBagBtn">应用到角色</button>
+                <button class="bag-btn secondary" id="openTxnBtn" type="button">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;vertical-align:middle;margin-right:4px;"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z"/></svg>明细
+                </button>
+                <button class="bag-btn secondary" id="closeBagBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- v3.1: 余额明细 modal -->
+    <div class="bag-modal" id="txnModal">
+        <div class="bag-modal-content">
+            <div class="bag-modal-header">
+                <div class="bag-header-title">
+                    <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:#684FA5;"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z"/></svg>
+                    <h3>余额明细</h3>
+                </div>
+                <button class="bag-close-btn" id="txnCloseBtn" type="button">×</button>
+            </div>
+
+            <div class="txn-filter-tabs">
+                <button class="txn-filter-tab active" data-filter="all" type="button">全部</button>
+                <button class="txn-filter-tab" data-filter="金币" type="button">金币</button>
+            </div>
+
+            <div class="bag-modal-body">
+                <div class="bag-empty" id="txnEmpty" style="display:none;">
+                    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                    <p>暂无流水记录<br>购买商品或获得金币后将在这里展示</p>
+                </div>
+                <div class="txn-list" id="txnList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/demo-api-shim.js"></script>
+    <script>
+        // demo 版：API 调用由 src/demo-api-shim.js 拦截到 localStorage
+        const API_BASE = '';
+        // 资源（角色图片等）走 COS 公开桶
+        const ASSET_BASE = 'https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/v2';
+
+        // CDN 配置
+        const CDN_CONFIG = {
+            enabled: true, // 是否启用 CDN
+            baseUrl: 'https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com',
+            imageDir: 'images/'
+        };
+
+        // 获取 CDN 图片 URL（支持 WebP 和缩略图）
+        function getCdnImageUrl(filename, options = {}) {
+            if (!CDN_CONFIG.enabled) return ASSET_BASE + '/商城图片/' + filename;
+
+            const { width, webp = true } = options;
+            let url = `${CDN_CONFIG.baseUrl}/${CDN_CONFIG.imageDir}${filename}`;
+
+            // 腾讯云 COS 图片处理
+            const params = [];
+            if (width) params.push(`thumbnail/${width}x`);
+            if (webp && !filename.endsWith('.svg')) params.push('format/webp');
+
+            if (params.length > 0) {
+                url += `?imageMogr2/${params.join('/')}`;
+            }
+
+            return url;
+        }
+
+        const defaultCategories = {
+            "衣服": { icon: "src/服饰icon.svg", subcategories: ["礼服", "上衣", "裤子", "鞋子", "配饰"] },
+            "发型": { icon: "src/发型icon.svg", subcategories: ["发型"] },
+            "头饰": { icon: "src/眼睛icon.svg", subcategories: ["头饰", "面部配饰", "颈部配饰"] },
+            "兑换星星": { icon: "src/星星icon.svg", subcategories: [] }
+        };
+
+        const categoryMigration = {
+            "形象装扮": "衣服",
+            "服饰": "衣服",
+            "头发": "发型",
+            "眼睛": "头饰",
+            "工具": "衣服",
+            "卡牌盲盒": "衣服",
+            "APP皮肤": "衣服",
+            "星星兑换": "兑换星星"
+        };
+
+        // 兑换星星固定选项（金币 → 星星）
+        const starExchangeOptions = [
+            { productId: 'exchange-100', productName: '兑换 100 星星', priceType: '金币', priceAmount: 100, starAmount: 100 },
+            { productId: 'exchange-200', productName: '兑换 200 星星', priceType: '金币', priceAmount: 200, starAmount: 200 },
+            { productId: 'exchange-500', productName: '兑换 500 星星', priceType: '金币', priceAmount: 500, starAmount: 500 },
+            { productId: 'exchange-1000', productName: '兑换 1000 星星', priceType: '金币', priceAmount: 1000, starAmount: 1000 },
+        ];
+
+        const mountDefaults = { x: 0, y: 0, scale: 100, rotation: 0, zIndex: 100 };
+
+        // v2.1: 多槽位配置
+        const slotConfig = {
+            "dress": { zIndex: 100, label: "礼服" },
+            "top": { zIndex: 110, label: "上衣" },
+            "bottom": { zIndex: 120, label: "下装" },
+            "shoes": { zIndex: 130, label: "鞋子" },
+            "accessory-head": { zIndex: 200, label: "头饰" },
+            "accessory-face": { zIndex: 190, label: "面部配饰" },
+            "accessory-hand": { zIndex: 180, label: "手持道具" },
+            "accessory-back": { zIndex: 50, label: "背部挂件" },
+            "accessory-neck": { zIndex: 140, label: "颈部配饰" },
+            "effect": { zIndex: 300, label: "特效层" },
+            "background": { zIndex: 10, label: "背景" }
+        };
+
+        // v2.1: 子类到槽位的映射
+        const subcategoryToSlot = {
+            "礼服": "dress",
+            "连衣裙": "dress",
+            "上衣": "top",
+            "裤子": "bottom",
+            "下装": "bottom",
+            "鞋子": "shoes",
+            "配饰": "accessory-neck",
+            "头发": "accessory-head",
+            "眼睛": "accessory-face",
+            "工具": "accessory-hand",
+            "背饰": "accessory-back"
+        };
+
+        // v2.1: 当前挂载状态（多槽位）
+        const equippedSlots = {};
+
+        let currentCategory = '全部';
+        let selectedProductId = null;
+        let currentProductsCache = [];
+        let previewZoomed = false;
+        let dragState = null;
+
+        // v2.3: 用户余额管理
+        let userBalance = { gold: 5000, star: 100 };
+
+        async function loadUserBalance() {
+            try {
+                const response = await fetch(API_BASE + '/api/balance');
+                const result = await response.json();
+                if (result.success) {
+                    userBalance = result.data;
+                    localStorage.setItem('userBalance', JSON.stringify(userBalance));
+                    updateBalanceDisplay();
+                }
+            } catch (error) {
+                console.error('[用户端] 获取余额失败:', error);
+                // fallback: 从本地获取
+                const saved = localStorage.getItem('userBalance');
+                if (saved) {
+                    userBalance = JSON.parse(saved);
+                }
+                updateBalanceDisplay();
+            }
+        }
+
+        function updateBalanceDisplay() {
+            // 如果页面有余额显示元素则更新
+            const goldEl = document.getElementById('goldBalanceValue');
+            const starEl = document.getElementById('starBalanceValue');
+            if (goldEl) goldEl.textContent = userBalance.gold.toLocaleString();
+            if (starEl) starEl.textContent = userBalance.star.toLocaleString();
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(showToast.timer);
+            showToast.timer = setTimeout(() => toast.classList.remove('show'), 1800);
+        }
+
+        function loadCategories() {
+            const saved = localStorage.getItem('shopCategories');
+            if (saved) {
+                const savedCategories = JSON.parse(saved);
+                const savedKeys = Object.keys(savedCategories);
+                const defaultKeys = Object.keys(defaultCategories);
+                if (savedKeys.length !== defaultKeys.length || !defaultKeys.every(k => savedKeys.includes(k))) {
+                    localStorage.setItem('shopCategories', JSON.stringify(defaultCategories));
+                    return defaultCategories;
+                }
+                let needsUpdate = false;
+                defaultKeys.forEach(key => {
+                    if (savedCategories[key].icon !== defaultCategories[key].icon) {
+                        savedCategories[key].icon = defaultCategories[key].icon;
+                        needsUpdate = true;
+                    }
+                });
+                if (needsUpdate) localStorage.setItem('shopCategories', JSON.stringify(savedCategories));
+                return savedCategories;
+            }
+            return defaultCategories;
+        }
+
+        function migrateProductCategories(products) {
+            return products.map(p => {
+                if (categoryMigration[p.category]) p.category = categoryMigration[p.category];
+                return p;
+            });
+        }
+
+        async function loadProducts() {
+            // v2.3: 从服务器API获取共享商品数据
+            try {
+                const response = await fetch(API_BASE + '/api/products');
+                const result = await response.json();
+                if (result.success) {
+                    console.log('[用户端] 从API加载商品:', result.data.length, '个');
+                    const products = result.data;
+                    // 临时写死：给"王冠"商品注入有效期，用于截图展示
+                    const crown = products.find(p => p.productName && p.productName.includes('王冠'));
+                    if (crown) crown.expiresAt = '2026-06-30T23:59:59Z';
+                    return products;
+                }
+                throw new Error(result.message || '获取商品失败');
+            } catch (error) {
+                console.error('[用户端] 获取商品失败:', error);
+                // fallback: 从本地获取
+                const saved = localStorage.getItem('shopProducts');
+                if (saved) {
+                    return JSON.parse(saved);
+                }
+                return [];
+            }
+        }
+
+        function saveProducts(products) {
+            // v2.3: 同步保存到服务器API
+            fetch(API_BASE + '/api/products', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(products)
+            }).catch(err => console.error('[用户端] 保存商品失败:', err));
+            // 同时保存到本地作为备份
+            localStorage.setItem('shopProducts', JSON.stringify(products));
+        }
+
+        async function getDisplayProducts(category = null) {
+            const products = await loadProducts();
+            let filtered = products.filter(p => p["上架状态"] === true);
+            if (category && category !== '全部') filtered = filtered.filter(p => p.category === category);
+            filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            return filtered;
+        }
+
+        function renderCategoryTabs() {
+            const container = document.getElementById('categoryTabsContainer');
+            const categories = loadCategories();
+            const categoryNames = Object.keys(categories);
+
+            let tabsHTML = `
+                <button class="tab-btn ${currentCategory === '全部' ? 'active' : ''}" data-category="全部">
+                    <div class="tab-icon-wrap">
+                        <svg viewBox="0 0 24 24" style="fill:${currentCategory === '全部' ? '#684FA5' : '#8c83a3'}"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+                    </div>
+                    <span>全部</span>
+                </button>
+            `;
+
+            categoryNames.forEach(name => {
+                const cat = categories[name];
+                const isActive = currentCategory === name;
+                tabsHTML += `
+                    <button class="tab-btn ${isActive ? 'active' : ''}" data-category="${name}">
+                        <div class="tab-icon-wrap">
+                            <img src="${cat.icon}" alt="${name}" style="filter:${isActive ? 'none' : 'grayscale(100%) opacity(0.65)'}">
+                        </div>
+                        <span>${name}</span>
+                    </button>
+                `;
+            });
+
+            container.innerHTML = tabsHTML;
+
+            container.querySelectorAll('.tab-btn').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    currentCategory = this.dataset.category;
+                    selectedProductId = null;
+                    renderCategoryTabs();
+                    renderProductGrid();
+                    clearMountedPreview(false);
+                });
+            });
+        }
+
+        // v3: 删除 <base href> 后，相对图片路径需要显式指向生产资源服务器
+        // （后台上传的图片存在 ASSET_BASE 上；本地仓库的 src/* 也存在生产同样路径）
+        function normalizeImageUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('data:')) return url;
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+
+            // 如果是商城图片，使用 CDN
+            if (url.includes('商城图片/')) {
+                const filename = url.split('商城图片/')[1];
+                return getCdnImageUrl(filename);
+            }
+
+            // 其他相对路径：拼接到 ASSET_BASE
+            const clean = url.startsWith('/') ? url.slice(1) : url;
+            return ASSET_BASE + '/' + clean;
+        }
+
+        function getSafeImageUrl(product) {
+            if (!product?.imageUrl) return '';
+            return normalizeImageUrl(product.imageUrl);
+        }
+
+        // v2.1: 获取挂载图片 URL，优先使用 mountImageUrl
+        function getMountImageUrl(product) {
+            if (!product) return '';
+            // 优先使用挂载专用图
+            if (product.mountImageUrl) {
+                return normalizeImageUrl(product.mountImageUrl);
+            }
+            // fallback 到展示图
+            return getSafeImageUrl(product);
+        }
+
+        // 图片懒加载
+        let lazyObserver = null;
+        function lazyLoadImages() {
+            if (!lazyObserver) {
+                lazyObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const img = entry.target;
+                            img.src = img.dataset.src;
+                            img.style.opacity = '1';
+                            img.style.transition = 'opacity 0.3s';
+                            img.removeAttribute('data-src');
+                            lazyObserver.unobserve(img);
+                        }
+                    });
+                }, { rootMargin: '50px' });
+            }
+
+            document.querySelectorAll('img.lazy-image[data-src]').forEach(img => {
+                lazyObserver.observe(img);
+            });
+        }
+
+        // v2.1: 根据商品子类获取槽位
+        function getSlotFromProduct(product) {
+            return subcategoryToSlot[product.subcategory] || subcategoryToSlot[product.category] || 'accessory-neck';
+        }
+
+        // v2.1: 获取槽位的默认 zIndex
+        function getSlotZIndex(slot) {
+            return slotConfig[slot]?.zIndex || 100;
+        }
+
+        async function renderProductGrid() {
+            const container = document.getElementById('productGridContainer');
+
+            // 兑换星星分类：渲染固定兑换选项
+            if (currentCategory === '兑换星星') {
+                currentProductsCache = [];
+                let html = '';
+                starExchangeOptions.forEach(opt => {
+                    const isSelected = selectedProductId === opt.productId;
+                    html += `
+                        <div class="item-card exchange-card ${isSelected ? 'selected' : ''}" data-exchange-id="${opt.productId}" style="cursor:pointer;">
+                            <div class="item-image" style="height:140px;flex-direction:column;gap:8px;">
+                                <img src="src/星星icon.svg" style="width:56px;height:56px;filter:brightness(0) saturate(100%) invert(45%) sepia(84%) saturate(362%) hue-rotate(288deg) brightness(92%) contrast(91%);" alt="星星">
+                                <span style="font-size:22px;font-weight:900;color:#694fa6;">${opt.starAmount}</span>
+                            </div>
+                            <div class="item-header">
+                                <span class="item-name">${opt.starAmount} 星星</span>
+                            </div>
+                            <div class="item-price-row">
+                                <div class="item-price gold">
+                                    <img src="src/金币icon.svg" class="price-icon" alt="">
+                                    <span>${opt.priceAmount.toLocaleString()} 金币</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+                container.querySelectorAll('.exchange-card').forEach(card => {
+                    card.addEventListener('click', function() {
+                        selectedProductId = this.dataset.exchangeId;
+                        renderProductGrid();
+                    });
+                });
+                return;
+            }
+
+            const products = await getDisplayProducts(currentCategory);
+            currentProductsCache = products;
+
+            if (!products.length) {
+                container.innerHTML = `
+                    <div style="text-align:center;padding:60px 20px;color:#CBC4D2;grid-column:1/-1;">
+                        <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:#CBC4D2;margin-bottom:16px;">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                        </svg>
+                        <p>暂无商品</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let productsHTML = '';
+            products.forEach(product => {
+                const isSelected = String(selectedProductId) === String(product.productId);
+                const priceClass = product.priceType === '金币' ? 'gold' : 'gems';
+                const isNew = product.isNewProduct;
+                const purchased = isProductPurchased(product.productId);
+                const imageUrl = getSafeImageUrl(product);
+
+                const imageHTML = imageUrl
+                    ? `<img data-src="${imageUrl}" alt="${product.productName}" class="lazy-image" style="opacity:0;">`
+                    : `<svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>`;
+
+                productsHTML += `
+                    <div class="item-card ${isSelected ? 'selected' : ''} ${purchased ? 'purchased' : ''}" data-product-id="${product.productId}">
+                        <div class="item-image">
+                            ${imageHTML}
+                            ${purchased ? '<div class="purchased-overlay">已购买</div>' : ''}
+                            <button class="item-favorite" type="button" aria-label="收藏">
+                                <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.87-8.55 11.54L12 21.35z"/></svg>
+                            </button>
+                        </div>
+                        <div class="item-header">
+                            <span class="item-name">${product.productName}</span>
+                            ${purchased ? '<div class="item-tag purchased-tag">已购</div>' : (isNew ? '<div class="item-tag">NEW</div>' : '')}
+                        </div>
+                        <div class="item-price-row">
+                            <div class="item-price ${priceClass}">
+                                <img src="src/${product.priceType === '金币' ? '金币icon' : '星星icon'}.svg" class="price-icon" alt="">
+                                <span>${Number(product.priceAmount || 0).toLocaleString()}</span>
+                            </div>
+                            ${(() => { const e = formatExpiry(product.expiresAt); return e ? `<span class="item-expiry-badge ${e.expired ? 'expired-badge' : ''}" style="margin-left:auto;">${e.expired ? '已过期' : '至 '}${e.str}</span>` : ''; })()}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = productsHTML;
+
+            // 图片懒加载
+            lazyLoadImages();
+
+            container.querySelectorAll('.item-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    selectedProductId = this.dataset.productId;
+                    renderProductGrid();
+                    previewSelectedProduct();
+                });
+            });
+
+            container.querySelectorAll('.item-favorite').forEach(fav => {
+                fav.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    this.classList.toggle('active');
+                });
+            });
+        }
+
+        function getSelectedProduct() {
+            return currentProductsCache.find(p => String(p.productId) === String(selectedProductId)) || null;
+        }
+
+        function ensureMountConfig(product) {
+            if (!product.mountConfig) product.mountConfig = { ...mountDefaults };
+            if (typeof product.mountConfig.x !== 'number') product.mountConfig.x = 0;
+            if (typeof product.mountConfig.y !== 'number') product.mountConfig.y = 0;
+            if (typeof product.mountConfig.scale !== 'number') product.mountConfig.scale = 100;
+            // v2.1: 新增字段
+            if (typeof product.mountConfig.rotation !== 'number') product.mountConfig.rotation = 0;
+            if (typeof product.mountConfig.zIndex !== 'number') product.mountConfig.zIndex = getSlotZIndex(product.mountConfig.slot || 'accessory-neck');
+            if (!product.mountConfig.slot) product.mountConfig.slot = getSlotFromProduct(product);
+            return product.mountConfig;
+        }
+
+        function applyMountConfigToPreview(config, syncControls = true) {
+            const mounted = document.getElementById('mountedItem');
+            mounted.style.left = '50%';
+            mounted.style.top = '50%';
+            mounted.style.width = '180px';
+            // v2.1: 添加 rotation 和 zIndex 支持
+            mounted.style.transform = `translate(-50%, -50%) translate3d(${config.x}px, ${config.y}px, 0) scale(${config.scale / 100}) rotate(${config.rotation}deg)`;
+            mounted.style.zIndex = config.zIndex || 100;
+
+            if (syncControls) {
+                syncAllControls(config);
+            }
+        }
+
+        // v3: 商品 → Spine skin 映射（按商品名关键词；后续可改为后台 spineSkin 字段）
+        function getSpineSkinForProduct(product) {
+            if (!product) return null;
+            // 优先用显式字段（M2 后台支持后会有）
+            if (product.spineSkin) return product.spineSkin;
+            const name = String(product.productName || '');
+            const sub = String(product.subcategory || '');
+            // 仅服装/套装类才参与 skin 映射，避免饰品被误切
+            const isOutfit = sub === '套装' || sub === '服装' || sub === '礼服';
+            if (!isOutfit) return null;
+            if (name.includes('粉')) return 'tzC';
+            if (name.includes('绿')) return 'tzD';
+            if (name.includes('藏青') || name.includes('深蓝')) return 'tzB';
+            if (name.includes('女生校服') || name.includes('蓝色') || name.includes('原版')) return 'tzA';
+            return null;
+        }
+
+        function previewSelectedProduct() {
+            const product = getSelectedProduct();
+            const mounted = document.getElementById('mountedItem');
+            const status = document.getElementById('mountStatusPill');
+            const saveText = document.getElementById('mountSavedText');
+
+            if (!product) {
+                clearMountedPreview(false);
+                return;
+            }
+
+            // v3: 男生模式下，服装/套装类自动切 Spine skin，跳过 PNG 挂件
+            const currentGender = localStorage.getItem('userGender') || '';
+            const spineSkin = (currentGender === 'male') ? getSpineSkinForProduct(product) : null;
+            if (spineSkin && window.spineApp && window.spineApp.setSkin(spineSkin)) {
+                mounted.removeAttribute('src');
+                mounted.classList.remove('active', 'dragging');
+                applyMountConfigToPreview({ ...mountDefaults });
+                status.textContent = `已换装（${spineSkin}）`;
+                saveText.textContent = '套装直接生效';
+                return;
+            }
+
+            // v2.1: 使用挂载专用图
+            const imageUrl = getMountImageUrl(product);
+            if (!imageUrl) {
+                clearMountedPreview(false);
+                showToast('该商品没有可挂载图片');
+                return;
+            }
+
+            const config = ensureMountConfig(product);
+            mounted.src = imageUrl;
+            mounted.classList.add('active');
+            applyMountConfigToPreview(config);
+            status.textContent = '预览中';
+            saveText.textContent = '未保存';
+        }
+
+        function clearMountedPreview(resetSelection = false) {
+            const mounted = document.getElementById('mountedItem');
+            mounted.removeAttribute('src');
+            mounted.classList.remove('active', 'dragging');
+            document.getElementById('mountStatusPill').textContent = '未挂载';
+            document.getElementById('mountSavedText').textContent = '未保存';
+            applyMountConfigToPreview({ ...mountDefaults });
+            if (resetSelection) {
+                selectedProductId = null;
+                renderProductGrid();
+            }
+        }
+
+        async function persistSelectedProduct() {
+            const product = getSelectedProduct();
+            if (!product) {
+                showToast('请先选择商品');
+                return;
+            }
+
+            const allProducts = await loadProducts();
+            const target = allProducts.find(p => String(p.productId) === String(product.productId));
+            if (!target) return;
+
+            // v2.1: 保存所有挂载配置字段
+            target.mountConfig = {
+                x: Number(document.getElementById('mountXRange').value),
+                y: Number(document.getElementById('mountYRange').value),
+                scale: Number(document.getElementById('mountScaleRange').value),
+                rotation: Number(document.getElementById('mountRotationRange').value),
+                zIndex: Number(document.getElementById('mountZIndexRange').value),
+                slot: document.getElementById('mountSlotSelect').value
+            };
+
+            saveProducts(allProducts);
+            product.mountConfig = { ...target.mountConfig };
+            document.getElementById('mountStatusPill').textContent = '已挂载';
+            document.getElementById('mountSavedText').textContent = '已保存';
+            showToast(`已保存 ${product.productName} 的挂载参数`);
+        }
+
+        function bindMountTuner() {
+            const sync = () => {
+                const product = getSelectedProduct();
+                if (!product) return;
+                const cfg = ensureMountConfig(product);
+                cfg.x = Number(document.getElementById('mountXRange').value);
+                cfg.y = Number(document.getElementById('mountYRange').value);
+                cfg.scale = Number(document.getElementById('mountScaleRange').value);
+                // v2.1: 新增字段同步
+                cfg.rotation = Number(document.getElementById('mountRotationRange').value);
+                cfg.zIndex = Number(document.getElementById('mountZIndexRange').value);
+                cfg.slot = document.getElementById('mountSlotSelect').value;
+                cfg.zIndex = getSlotZIndex(cfg.slot); // 自动设置槽位对应层级
+                applyMountConfigToPreview(cfg, true);
+                document.getElementById('mountSavedText').textContent = '未保存';
+                // 更新层级显示
+                document.getElementById('mountZIndexRange').value = cfg.zIndex;
+                document.getElementById('mountZIndexValue').textContent = cfg.zIndex;
+            };
+
+            ['mountXRange', 'mountYRange', 'mountScaleRange', 'mountRotationRange', 'mountZIndexRange'].forEach(id => {
+                document.getElementById(id).addEventListener('input', sync);
+            });
+            document.getElementById('mountSlotSelect').addEventListener('change', sync);
+
+            document.getElementById('mountTunerToggle').addEventListener('click', () => {
+                const tuner = document.querySelector('.mount-tuner');
+                const avatar = document.getElementById('avatarContainer');
+                tuner.classList.toggle('expanded');
+                avatar.classList.toggle('maximized', !tuner.classList.contains('expanded'));
+            });
+
+            document.getElementById('saveMountBtn').addEventListener('click', persistSelectedProduct);
+            document.getElementById('resetMountBtn').addEventListener('click', () => {
+                const product = getSelectedProduct();
+                if (!product) return;
+                const slot = getSlotFromProduct(product);
+                product.mountConfig = { ...mountDefaults, slot, zIndex: getSlotZIndex(slot) };
+                applyMountConfigToPreview(product.mountConfig, true);
+                // v2.1: 同步所有控件
+                syncAllControls(product.mountConfig);
+                document.getElementById('mountSavedText').textContent = '未保存';
+            });
+        }
+
+        /// v2.1: 同步所有控件值
+        function syncAllControls(config) {
+            document.getElementById('mountXRange').value = config.x;
+            document.getElementById('mountYRange').value = config.y;
+            document.getElementById('mountScaleRange').value = config.scale;
+            document.getElementById('mountRotationRange').value = config.rotation;
+            document.getElementById('mountZIndexRange').value = config.zIndex;
+            document.getElementById('mountSlotSelect').value = config.slot || 'accessory-neck';
+
+            document.getElementById('mountXValue').textContent = config.x;
+            document.getElementById('mountYValue').textContent = config.y;
+            document.getElementById('mountScaleValue').textContent = `${config.scale}%`;
+            document.getElementById('mountRotationValue').textContent = `${config.rotation}°`;
+            document.getElementById('mountZIndexValue').textContent = config.zIndex;
+            document.getElementById('mountSlotValue').textContent = slotConfig[config.slot]?.label || '-';
+        }
+
+        function bindDragMount() {
+            const mounted = document.getElementById('mountedItem');
+            const stage = document.getElementById('avatarStack');
+
+            let rafId = null;
+            let pendingConfig = null;
+
+            const flushRender = () => {
+                if (pendingConfig) {
+                    applyMountConfigToPreview(pendingConfig, false);
+                }
+                rafId = null;
+            };
+
+            const scheduleRender = (config) => {
+                pendingConfig = { ...config };
+                if (rafId) return;
+                rafId = requestAnimationFrame(flushRender);
+            };
+
+            const onMove = (clientX, clientY) => {
+                if (!dragState) return;
+                const rect = stage.getBoundingClientRect();
+                const nextX = Math.max(-200, Math.min(200, Math.round(clientX - rect.left - rect.width / 2 - dragState.pointerOffsetX)));
+                const nextY = Math.max(-260, Math.min(260, Math.round(clientY - rect.top - rect.height / 2 - dragState.pointerOffsetY)));
+
+                const product = getSelectedProduct();
+                if (!product) return;
+                const cfg = ensureMountConfig(product);
+                cfg.x = nextX;
+                cfg.y = nextY;
+
+                scheduleRender(cfg);
+                document.getElementById('mountSavedText').textContent = '未保存';
+            };
+
+            mounted.addEventListener('mousedown', (e) => {
+                if (!mounted.classList.contains('active')) return;
+                const product = getSelectedProduct();
+                if (!product) return;
+
+                const cfg = ensureMountConfig(product);
+                const rect = stage.getBoundingClientRect();
+                const itemCenterX = rect.left + rect.width / 2 + cfg.x;
+                const itemCenterY = rect.top + rect.height / 2 + cfg.y;
+
+                dragState = {
+                    pointerOffsetX: e.clientX - itemCenterX,
+                    pointerOffsetY: e.clientY - itemCenterY
+                };
+
+                mounted.classList.add('dragging');
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!dragState) return;
+                onMove(e.clientX, e.clientY);
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!dragState) return;
+                mounted.classList.remove('dragging');
+
+                const product = getSelectedProduct();
+                if (product) {
+                    const cfg = ensureMountConfig(product);
+                    document.getElementById('mountXRange').value = cfg.x;
+                    document.getElementById('mountYRange').value = cfg.y;
+                    document.getElementById('mountXValue').textContent = cfg.x;
+                    document.getElementById('mountYValue').textContent = cfg.y;
+                    document.getElementById('mountScaleValue').textContent = `${cfg.scale}%`;
+                    applyMountConfigToPreview(cfg, false);
+                }
+
+                dragState = null;
+            });
+        }
+
+        const colorStops = [
+            { position: 0, color: '#FFD9E2' },
+            { position: 0.25, color: '#EADDFF' },
+            { position: 0.5, color: '#D0BCFF' },
+            { position: 0.75, color: '#B0E0E6' },
+            { position: 1, color: '#FFD9E2' }
+        ];
+
+        function getColorAtPosition(position) {
+            for (let i = 0; i < colorStops.length - 1; i++) {
+                const start = colorStops[i];
+                const end = colorStops[i + 1];
+                if (position >= start.position && position <= end.position) {
+                    const range = end.position - start.position;
+                    const localPos = (position - start.position) / range;
+                    return interpolateColor(start.color, end.color, localPos);
+                }
+            }
+            return colorStops[colorStops.length - 1].color;
+        }
+
+        function interpolateColor(color1, color2, factor) {
+            const r1 = parseInt(color1.slice(1, 3), 16);
+            const g1 = parseInt(color1.slice(3, 5), 16);
+            const b1 = parseInt(color1.slice(5, 7), 16);
+            const r2 = parseInt(color2.slice(1, 3), 16);
+            const g2 = parseInt(color2.slice(3, 5), 16);
+            const b2 = parseInt(color2.slice(5, 7), 16);
+            const r = Math.round(r1 + (r2 - r1) * factor);
+            const g = Math.round(g1 + (g2 - g1) * factor);
+            const b = Math.round(b1 + (b2 - b1) * factor);
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        function updateSliderPosition(position) {
+            position = Math.max(0, Math.min(1, position));
+            const sliderThumb = document.querySelector('.slider-thumb');
+            const sliderValue = document.querySelector('.slider-value');
+            const leftSection = document.querySelector('.left-section');
+
+            sliderThumb.style.left = `${position * 100}%`;
+            const currentColor = getColorAtPosition(position);
+            sliderValue.textContent = currentColor.toUpperCase();
+            const lighterColor = interpolateColor(currentColor, '#FFFFFF', 0.7);
+            leftSection.style.background = `linear-gradient(135deg, ${lighterColor} 0%, ${currentColor} 50%, ${lighterColor} 100%)`;
+        }
+
+        function initColorSlider() {
+            const sliderTrack = document.querySelector('.slider-track');
+            const sliderThumb = document.querySelector('.slider-thumb');
+            const colorDots = document.querySelectorAll('.slider-color-dot');
+
+            updateSliderPosition(0.5);
+            let isDragging = false;
+
+            sliderThumb.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                handleSliderMove(e.clientX);
+            });
+
+            document.addEventListener('mouseup', () => { isDragging = false; });
+
+            sliderTrack.addEventListener('click', (e) => {
+                handleSliderMove(e.clientX);
+            });
+
+            function handleSliderMove(clientX) {
+                const trackRect = sliderTrack.getBoundingClientRect();
+                const position = (clientX - trackRect.left) / trackRect.width;
+                updateSliderPosition(position);
+            }
+
+            colorDots.forEach((dot, index) => {
+                const positions = [0, 0.25, 0.5, 0.75];
+                dot.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    colorDots.forEach(d => d.style.transform = '');
+                    this.style.transform = 'scale(1.3)';
+                    updateSliderPosition(positions[index]);
+                });
+            });
+
+            const dotColors = ['#FFB0C9', '#E9DDFF', '#D0BCFF', '#B0E0E6'];
+            colorDots.forEach((dot, index) => { dot.style.background = dotColors[index]; });
+        }
+
+        function bindActions() {
+            document.getElementById('applyToAvatarBtn').addEventListener('click', () => {
+                const product = getSelectedProduct();
+                if (!product) {
+                    showToast('请先选择一个商品');
+                    return;
+                }
+                const imageUrl = getSafeImageUrl(product);
+                if (!imageUrl) {
+                    showToast('该商品没有可挂载图片');
+                    return;
+                }
+                previewSelectedProduct();
+                document.getElementById('mountStatusPill').textContent = '预览中';
+                showToast(`已将 ${product.productName} 挂载到角色预览`);
+            });
+
+            document.getElementById('resetLookBtn').addEventListener('click', () => clearMountedPreview(true));
+            document.getElementById('saveLookBtn').addEventListener('click', showPurchaseModal);
+            document.getElementById('clearMountBtn').addEventListener('click', () => clearMountedPreview(false));
+
+            document.getElementById('rulesBtn').addEventListener('click', () => {
+                document.getElementById('rulesModal').classList.add('show');
+            });
+            document.getElementById('rulesCloseBtn').addEventListener('click', () => {
+                document.getElementById('rulesModal').classList.remove('show');
+            });
+            document.getElementById('rulesModal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) document.getElementById('rulesModal').classList.remove('show');
+            });
+        }
+
+        function syncPanelHeights() {
+            // v2.4.1: 已改为 CSS 自然等高（.main-canvas align-items:stretch + max-height），此函数保留为空 stub
+        }
+
+        // 购买弹窗相关函数
+        function showPurchaseModal() {
+            // 兑换星星分类：走兑换流程
+            if (currentCategory === '兑换星星') {
+                const opt = starExchangeOptions.find(o => o.productId === selectedProductId);
+                if (!opt) { showToast('请先选择兑换档位'); return; }
+
+                document.getElementById('purchaseProductImg').src = 'src/星星icon.svg';
+                document.getElementById('purchaseProductImg').style.cssText = 'width:60px;height:60px;object-fit:contain;filter:brightness(0) saturate(100%) invert(45%) sepia(84%) saturate(362%) hue-rotate(288deg) brightness(92%) contrast(91%);';
+                document.getElementById('purchaseProductName').textContent = `兑换 ${opt.starAmount} 星星`;
+                document.getElementById('purchaseProductPrice').innerHTML = `
+                    <img src="src/金币icon.svg" class="price-icon" alt="">
+                    <span>${opt.priceAmount.toLocaleString()} 金币 → ${opt.starAmount} 星星</span>
+                `;
+                document.getElementById('purchaseModal').classList.add('show');
+                return;
+            }
+
+            const product = getSelectedProduct();
+            if (!product) {
+                showToast('请先选择一个商品');
+                return;
+            }
+
+            // v2.4.1: 已购买商品不可重复购买
+            if (isProductPurchased(product.productId)) {
+                showToast('该商品已购买，无法重复购买');
+                return;
+            }
+
+            const imageUrl = getSafeImageUrl(product);
+
+            document.getElementById('purchaseProductImg').src = imageUrl || '';
+            document.getElementById('purchaseProductImg').style.cssText = '';
+            document.getElementById('purchaseProductName').textContent = product.productName;
+            document.getElementById('purchaseProductPrice').innerHTML = `
+                <img src="src/${product.priceType === '金币' ? '金币icon' : '星星icon'}.svg" class="price-icon" alt="">
+                <span>${Number(product.priceAmount || 0).toLocaleString()} ${product.priceType}</span>
+            `;
+
+            document.getElementById('purchaseModal').classList.add('show');
+        }
+
+        // ==================== 订单管理系统 ====================
+        async function loadOrders() {
+            // v2.3: 从服务器API获取订单
+            try {
+                const response = await fetch(API_BASE + '/api/orders');
+                const result = await response.json();
+                if (result.success) {
+                    return result.data;
+                }
+                throw new Error(result.message || '获取订单失败');
+            } catch (error) {
+                console.error('[用户端] 获取订单失败:', error);
+                // fallback: 从本地获取
+                const saved = localStorage.getItem('shopOrders');
+                return saved ? JSON.parse(saved) : [];
+            }
+        }
+
+        function saveOrders(orders) {
+            // v2.3: 保存到服务器API（异步）
+            fetch(API_BASE + '/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orders[0]) // 发送最新订单
+            }).catch(err => console.error('[用户端] 保存订单失败:', err));
+            // 同时保存到本地作为备份
+            localStorage.setItem('shopOrders', JSON.stringify(orders));
+        }
+
+        function generateOrderId() {
+            const orders = loadOrders();
+            const today = new Date();
+            const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+            const todayOrders = orders.filter(o => o.orderId && o.orderId.startsWith(`ORD${dateStr}`));
+            const maxNum = todayOrders.reduce((max, o) => {
+                const num = parseInt(o.orderId.slice(-4)) || 0;
+                return Math.max(max, num);
+            }, 0);
+            return `ORD${dateStr}${String(maxNum + 1).padStart(4, '0')}`;
+        }
+
+        function getCurrentUser() {
+            // 模拟用户信息（实际项目应从登录系统获取）
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) return JSON.parse(savedUser);
+            // 默认模拟用户
+            const defaultUser = {
+                userId: 'U001',
+                nickname: '游客用户'
+            };
+            localStorage.setItem('currentUser', JSON.stringify(defaultUser));
+            return defaultUser;
+        }
+
+        function hidePurchaseModal() {
+            document.getElementById('purchaseModal').classList.remove('show');
+        }
+
+        async function confirmPurchase() {
+            // 兑换星星流程
+            if (currentCategory === '兑换星星') {
+                const opt = starExchangeOptions.find(o => o.productId === selectedProductId);
+                if (!opt) return;
+
+                // 检查金币余额
+                if (userBalance.gold < opt.priceAmount) {
+                    showToast('金币余额不足');
+                    hidePurchaseModal();
+                    return;
+                }
+
+                // 扣除金币，增加星星
+                userBalance.gold -= opt.priceAmount;
+                userBalance.star += opt.starAmount;
+                localStorage.setItem('userBalance', JSON.stringify(userBalance));
+                updateBalanceDisplay();
+
+                // 调用 API 更新余额
+                try {
+                    await fetch(API_BASE + '/api/balance', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(userBalance)
+                    });
+                } catch (err) {
+                    console.error('[兑换星星] API 更新失败:', err);
+                }
+
+                hidePurchaseModal();
+                showToast(`✨ 兑换成功！获得 ${opt.starAmount} 星星`);
+                return;
+            }
+
+            const product = getSelectedProduct();
+            if (!product) return;
+
+            // 创建订单请求
+            const user = getCurrentUser();
+            const order = {
+                userId: user.userId,
+                nickname: user.nickname,
+                productName: product.productName,
+                productPrice: product.priceAmount,
+                priceType: product.priceType,
+                productId: product.productId
+            };
+
+            // v2.3: 调用服务器API创建订单（包含库存检查、余额扣减）
+            try {
+                const response = await fetch(API_BASE + '/api/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(order)
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    showToast(result.message || '购买失败');
+                    hidePurchaseModal();
+                    return;
+                }
+
+                // 更新本地余额显示
+                if (result.balance) {
+                    userBalance = result.balance;
+                    localStorage.setItem('userBalance', JSON.stringify(userBalance));
+                    updateBalanceDisplay();
+                }
+
+                // v3.0: 自动保存到背包
+                await saveToBag(product);
+
+                // 更新本地商品库存
+                const allProducts = await loadProducts();
+                const targetProduct = allProducts.find(p => String(p.productId) === String(product.productId));
+                if (targetProduct) {
+                    product.consumedStock = targetProduct.consumedStock;
+                    product.totalStock = targetProduct.totalStock;
+                }
+
+                hidePurchaseModal();
+                showToast(`🎉 购买成功！订单号：${result.data.orderId}`);
+                renderProductGrid(); // v2.4.1: 刷新列表以显示"已购"状态
+            } catch (error) {
+                console.error('[用户端] 购买失败:', error);
+                showToast('购买失败，请稍后重试');
+                hidePurchaseModal();
+            }
+        }
+
+        function bindPurchaseModal() {
+            document.getElementById('purchaseCancelBtn').addEventListener('click', hidePurchaseModal);
+            document.getElementById('purchaseConfirmBtn').addEventListener('click', confirmPurchase);
+
+            // 点击弹窗背景关闭
+            document.getElementById('purchaseModal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) {
+                    hidePurchaseModal();
+                }
+            });
+        }
+
+        // ==================== v3.0: 背包系统 ====================
+        let bagItems = [];
+        let selectedBagItemId = null;
+
+        // v2.4.1: 判断商品是否已购买（基于背包数据）
+        function isProductPurchased(productId) {
+            if (!productId) return false;
+            return bagItems.some(item => String(item.productId) === String(productId));
+        }
+
+        function isItemExpired(item) {
+            if (!item.expiresAt) return false;
+            return new Date(item.expiresAt) < new Date();
+        }
+
+        function formatExpiry(expiresAt) {
+            if (!expiresAt) return null;
+            const d = new Date(expiresAt);
+            const expired = d < new Date();
+            const str = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            return { str, expired };
+        }
+
+        async function loadBagItems() {
+            try {
+                const response = await fetch(API_BASE + '/api/bag');
+                const result = await response.json();
+                if (result.success) {
+                    bagItems = result.data;
+                    localStorage.setItem('bagItems', JSON.stringify(bagItems));
+                    console.log('[背包] 加载成功:', bagItems.length, '个商品');
+                }
+            } catch (error) {
+                console.error('[背包] 加载失败:', error);
+                const saved = localStorage.getItem('bagItems');
+                bagItems = saved ? JSON.parse(saved) : [];
+            }
+        }
+
+        async function showBagModal() {
+            await loadBagItems();
+            await loadUserBalance();
+
+            // 更新统计信息
+            document.getElementById('bagGoldBalance').textContent = userBalance.gold.toLocaleString();
+            document.getElementById('bagItemCount').textContent = bagItems.length;
+            const expiredCount = bagItems.filter(i => isItemExpired(i)).length;
+            document.getElementById('bagExpiredCount').textContent = expiredCount;
+
+            // 渲染背包商品
+            renderBagItems();
+
+            document.getElementById('bagModal').classList.add('show');
+        }
+
+        function hideBagModal() {
+            document.getElementById('bagModal').classList.remove('show');
+            selectedBagItemId = null;
+        }
+
+        function renderBagItems() {
+            const gridContainer = document.getElementById('bagItemsGrid');
+            const emptyState = document.getElementById('bagEmpty');
+
+            if (bagItems.length === 0) {
+                gridContainer.style.display = 'none';
+                emptyState.style.display = 'flex';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            gridContainer.style.display = 'grid';
+
+            const activeItems = bagItems.filter(i => !isItemExpired(i));
+            const expiredItems = bagItems.filter(i => isItemExpired(i));
+
+            const renderCard = (item) => {
+                const isSelected = String(selectedBagItemId) === String(item.productId);
+                const imageUrl = normalizeImageUrl(item.imageUrl || item.mountImageUrl);
+                const expired = isItemExpired(item);
+                const expiry = formatExpiry(item.expiresAt);
+                return `
+                    <div class="bag-item-card ${isSelected ? 'selected' : ''} ${expired ? 'expired' : ''}" data-product-id="${item.productId}">
+                        <div class="bag-item-image">
+                            ${imageUrl ? `<img src="${imageUrl}" alt="${item.productName}">` : '<svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>'}
+                        </div>
+                        <div class="bag-item-name">${item.productName}</div>
+                        <div class="bag-item-meta">${item.priceType || '金币'} ${item.priceAmount || 0}</div>
+                        ${expiry ? `<div class="bag-item-expiry ${expiry.expired ? 'expired' : ''}">${expiry.expired ? '已过期 ' : '有效至 '}${expiry.str}</div>` : ''}
+                    </div>
+                `;
+            };
+
+            let html = '';
+            if (activeItems.length) {
+                activeItems.forEach(item => { html += renderCard(item); });
+            }
+            if (expiredItems.length) {
+                html += `<div class="bag-section-title">已过期商品</div>`;
+                expiredItems.forEach(item => { html += renderCard(item); });
+            }
+
+            gridContainer.innerHTML = html;
+
+            // 绑定点击事件
+            gridContainer.querySelectorAll('.bag-item-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    selectedBagItemId = this.dataset.productId;
+                    renderBagItems();
+                });
+            });
+        }
+
+        function applyFromBag() {
+            if (!selectedBagItemId) {
+                showToast('请先选择一个背包商品');
+                return;
+            }
+
+            const item = bagItems.find(i => String(i.productId) === String(selectedBagItemId));
+            if (!item) return;
+
+            const imageUrl = normalizeImageUrl(item.imageUrl || item.mountImageUrl);
+            if (!imageUrl) {
+                showToast('该商品没有可挂载图片');
+                return;
+            }
+
+            const mounted = document.getElementById('mountedItem');
+            const config = item.mountConfig || { x: 0, y: 0, scale: 100, rotation: 0 };
+
+            mounted.src = imageUrl;
+            mounted.classList.add('active');
+            applyMountConfigToPreview(config);
+
+            document.getElementById('mountStatusPill').textContent = '已装备';
+            document.getElementById('mountSavedText').textContent = '来自背包';
+
+            hideBagModal();
+            showToast(`已将 ${item.productName} 从背包装备到角色`);
+        }
+
+        async function saveToBag(product) {
+            const bagItem = {
+                productId: product.productId,
+                productName: product.productName,
+                imageUrl: product.imageUrl,
+                mountImageUrl: product.mountImageUrl || product.imageUrl,
+                priceType: product.priceType,
+                priceAmount: product.priceAmount,
+                category: product.category,
+                subcategory: product.subcategory,
+                purchasedAt: new Date().toISOString(),
+                quantity: 1,
+                mountConfig: product.mountConfig || { x: 0, y: 0, scale: 100, rotation: 0, zIndex: 100 }
+            };
+
+            try {
+                // 先更新本地缓存
+                const existingIndex = bagItems.findIndex(i => i.productId === product.productId);
+                if (existingIndex > -1) {
+                    bagItems[existingIndex].quantity += 1;
+                    bagItems[existingIndex].purchasedAt = new Date().toISOString();
+                } else {
+                    bagItems.push(bagItem);
+                }
+                localStorage.setItem('bagItems', JSON.stringify(bagItems));
+
+                // 同步到服务器
+                await fetch(API_BASE + '/api/bag', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bagItem)
+                });
+
+                console.log('[背包] 已保存:', product.productName);
+            } catch (error) {
+                console.error('[背包] 保存失败:', error);
+            }
+        }
+
+        function bindBagModal() {
+            document.getElementById('myBagBtn').addEventListener('click', showBagModal);
+            document.getElementById('bagCloseBtn').addEventListener('click', hideBagModal);
+            document.getElementById('closeBagBtn').addEventListener('click', hideBagModal);
+            document.getElementById('applyFromBagBtn').addEventListener('click', applyFromBag);
+
+            // 点击背景关闭
+            document.getElementById('bagModal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) hideBagModal();
+            });
+        }
+
+        // ==================== v3.1: 余额流水明细 ====================
+        let txnList = [];
+        let txnFilter = 'all';
+
+        async function loadTransactions() {
+            try {
+                const r = await fetch(API_BASE + '/api/transactions?limit=200');
+                const j = await r.json();
+                txnList = (j && j.success && Array.isArray(j.data)) ? j.data : [];
+            } catch (e) {
+                console.error('[流水] 加载失败:', e);
+                txnList = [];
+            }
+        }
+
+        function formatTxnTime(iso) {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return iso || '';
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function renderTransactions() {
+            const root = document.getElementById('txnList');
+            const empty = document.getElementById('txnEmpty');
+            const list = txnFilter === 'all' ? txnList : txnList.filter(t => t.currency === txnFilter);
+            if (!list.length) {
+                root.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+            root.innerHTML = list.map(t => {
+                const sign = t.amount > 0 ? '+' : '';
+                const cls = t.amount > 0 ? 'positive' : 'negative';
+                const desc = t.description || (t.type === 'purchase' ? '购买商品' : '余额变动');
+                const after = (typeof t.afterBalance === 'number') ? t.afterBalance : '-';
+                return `
+                <div class="txn-row">
+                    <div class="txn-meta">
+                        <div class="txn-desc">${desc}</div>
+                        <div class="txn-time">${formatTxnTime(t.time)} · ${t.currency || ''}</div>
+                    </div>
+                    <div class="txn-amount ${cls}">${sign}${t.amount}</div>
+                    <div class="txn-balance">余 ${after}</div>
+                </div>`;
+            }).join('');
+        }
+
+        async function showTxnModal() {
+            txnFilter = 'all';
+            document.querySelectorAll('.txn-filter-tab').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+            document.getElementById('txnList').innerHTML = '';
+            document.getElementById('txnEmpty').style.display = 'none';
+            document.getElementById('txnModal').classList.add('show');
+            await loadTransactions();
+            renderTransactions();
+        }
+
+        function hideTxnModal() {
+            document.getElementById('txnModal').classList.remove('show');
+        }
+
+        function bindTxnModal() {
+            document.getElementById('openTxnBtn').addEventListener('click', showTxnModal);
+            document.getElementById('txnCloseBtn').addEventListener('click', hideTxnModal);
+            document.getElementById('txnModal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) hideTxnModal();
+            });
+            document.querySelectorAll('.txn-filter-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.txn-filter-tab').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    txnFilter = btn.dataset.filter;
+                    renderTransactions();
+                });
+            });
+        }
+
+        // ==================== v2.5: 性别选择系统 ====================
+        const GENDER_KEY = 'userGender';
+        let pendingGender = null; // 弹窗内暂存的待确认选项
+
+        function getUserGender() {
+            const saved = localStorage.getItem(GENDER_KEY);
+            return saved === 'male' || saved === 'female' ? saved : null;
+        }
+
+        function setUserGender(gender) {
+            if (gender !== 'male' && gender !== 'female') return;
+            localStorage.setItem(GENDER_KEY, gender);
+        }
+
+        function applyGenderToUI(gender) {
+            const base = document.getElementById('avatarBase');
+            const placeholder = document.getElementById('avatarPlaceholderMale');
+            const stage = document.getElementById('avatarStage');  // v3: Spine canvas
+            const switcher = document.getElementById('skinSwitcher');
+            const label = document.getElementById('genderSwitchLabel');
+            if (!base || !placeholder) return;
+            // v3: 男生 = Spine（若可用）；女生 = 原 PNG（保持 v2.5 不变）
+            const spineReady = !!window.spineApp;
+            if (gender === 'male') {
+                base.style.display = 'none';
+                placeholder.style.display = 'none';
+                if (spineReady && stage) {
+                    stage.style.display = '';
+                } else {
+                    // Spine 未就绪：回退显示原 SVG 占位
+                    placeholder.style.display = 'flex';
+                    if (stage) stage.style.display = 'none';
+                }
+                if (label) label.textContent = '男生';
+            } else if (gender === 'female') {
+                base.style.display = '';
+                if (stage) stage.style.display = 'none';
+                placeholder.style.display = 'none';
+                if (label) label.textContent = '女生';
+            } else {
+                // 未选择：默认女生体验（原 PNG）
+                base.style.display = '';
+                if (stage) stage.style.display = 'none';
+                placeholder.style.display = 'none';
+                if (label) label.textContent = '切换性别';
+            }
+        }
+
+        function showGenderModal() {
+            const modal = document.getElementById('genderModal');
+            const confirmBtn = document.getElementById('genderConfirmBtn');
+            // 重置选项状态，默认选中已保存的性别
+            pendingGender = getUserGender();
+            modal.querySelectorAll('.gender-card').forEach(card => {
+                card.classList.toggle('selected', card.dataset.gender === pendingGender);
+            });
+            confirmBtn.disabled = !pendingGender;
+            modal.classList.add('show');
+        }
+
+        function hideGenderModal() {
+            document.getElementById('genderModal').classList.remove('show');
+        }
+
+        function bindGenderModal() {
+            const modal = document.getElementById('genderModal');
+            const confirmBtn = document.getElementById('genderConfirmBtn');
+            const cards = modal.querySelectorAll('.gender-card');
+
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    pendingGender = card.dataset.gender;
+                    cards.forEach(c => c.classList.toggle('selected', c === card));
+                    confirmBtn.disabled = false;
+                });
+            });
+
+            confirmBtn.addEventListener('click', () => {
+                if (!pendingGender) return;
+                setUserGender(pendingGender);
+                applyGenderToUI(pendingGender);
+                hideGenderModal();
+                showToast(pendingGender === 'female' ? '已切换为女生角色' : '已切换为男生角色（占位图）');
+            });
+
+            // 切换性别入口
+            document.getElementById('genderSwitchBtn').addEventListener('click', showGenderModal);
+
+            // 首次必须选择，不允许点击遮罩关闭
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal && getUserGender()) hideGenderModal();
+            });
+        }
+
+        async function initShop() {
+            applyGenderToUI(getUserGender()); // v2.5: 先应用已存的性别（如果有）
+            loadUserBalance(); // v2.3: 加载用户余额
+            await loadBagItems(); // v3.0: 预加载背包数据
+            renderCategoryTabs();
+            await renderProductGrid();
+            bindMountTuner();
+            bindDragMount();
+            initColorSlider();
+            bindActions();
+            bindPurchaseModal();
+            bindBagModal(); // v3.0: 绑定背包弹窗
+            bindTxnModal(); // v3.1: 绑定流水明细弹窗
+            bindGenderModal(); // v2.5: 绑定性别选择弹窗
+            syncPanelHeights();
+            // v2.5: 首次进入强制选择
+            if (!getUserGender()) showGenderModal();
+        }
+
+        document.addEventListener('DOMContentLoaded', initShop);
+    </script>
+
+    <!-- v3: Spine WebGL runtime + 角色渲染 -->
+    <script src="https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/spine-webgl.js"></script>
+    <script>
+        (function () {
+            const SPINE_BASE = 'https://shop-assets-1259055229.cos.ap-guangzhou.myqcloud.com/spine/';
+            const SPINE_DEFAULT_SKIN = 'tzA';
+            const SPINE_DEFAULT_ANIMATION = 'animation';
+
+            const canvas = document.getElementById('avatarStage');
+            const fallbackImg = document.getElementById('avatarBase');
+            const switcher = document.getElementById('skinSwitcher');
+
+            let skeleton = null;
+            let animState = null;
+
+            function showFallback(reason) {
+                console.error('[Spine] 加载失败，回退到 PNG:', reason);
+                if (canvas) canvas.style.display = 'none';
+                if (fallbackImg) fallbackImg.style.display = '';
+                if (switcher) switcher.style.display = 'none';
+            }
+
+            function waitForAssets(assetManager) {
+                return new Promise((resolve, reject) => {
+                    (function check() {
+                        if (assetManager.isLoadingComplete()) resolve();
+                        else if (assetManager.hasErrors()) reject(new Error(JSON.stringify(assetManager.getErrors())));
+                        else requestAnimationFrame(check);
+                    })();
+                });
+            }
+
+            async function initSpine() {
+                if (!canvas) return showFallback('canvas 元素不存在');
+                if (typeof spine === 'undefined') return showFallback('spine runtime 未加载');
+
+                const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+                if (!gl) return showFallback('WebGL 不可用');
+
+                const shader = spine.webgl.Shader.newTwoColoredTextured(gl);
+                const batcher = new spine.webgl.PolygonBatcher(gl);
+                const mvp = new spine.webgl.Matrix4();
+                const renderer = new spine.webgl.SkeletonRenderer(gl);
+                renderer.premultipliedAlpha = false;
+
+                const assetManager = new spine.webgl.AssetManager(gl);
+                const jsonUrl = SPINE_BASE + 'as.json';
+                const atlasUrl = SPINE_BASE + 'as.atlas';
+                assetManager.loadText(jsonUrl);
+                assetManager.loadTextureAtlas(atlasUrl);
+
+                try {
+                    await waitForAssets(assetManager);
+                } catch (e) {
+                    return showFallback(e);
+                }
+
+                const atlas = assetManager.get(atlasUrl);
+                const rawJsonText = assetManager.get(jsonUrl);
+                if (!atlas || !rawJsonText) return showFallback('atlas/json 缺失');
+
+                const rawJson = JSON.parse(rawJsonText);
+                const atlasRegionNames = new Set(atlas.regions.map(r => r.name));
+                if (rawJson.skins && !Array.isArray(rawJson.skins)) {
+                    Object.keys(rawJson.skins).forEach(skinName => {
+                        const slots = rawJson.skins[skinName];
+                        let drop = false;
+                        for (const s in slots) for (const a in slots[s]) {
+                            const att = slots[s][a];
+                            const region = att.path || att.name || a;
+                            if (!atlasRegionNames.has(region)) drop = true;
+                        }
+                        if (drop) {
+                            delete rawJson.skins[skinName];
+                            console.warn('[Spine] 跳过 skin', skinName);
+                        }
+                    });
+                }
+
+                const skeletonJson = new spine.SkeletonJson(new spine.AtlasAttachmentLoader(atlas));
+                const skeletonData = skeletonJson.readSkeletonData(rawJson);
+                skeleton = new spine.Skeleton(skeletonData);
+                animState = new spine.AnimationState(new spine.AnimationStateData(skeletonData));
+
+                const availableSkins = skeletonData.skins.map(s => s.name);
+                let activeSkin = availableSkins.includes(SPINE_DEFAULT_SKIN) ? SPINE_DEFAULT_SKIN : availableSkins[0];
+                skeleton.setSkinByName(activeSkin);
+                skeleton.setSlotsToSetupPose();
+
+                const anims = skeletonData.animations.map(a => a.name);
+                if (anims.includes(SPINE_DEFAULT_ANIMATION)) animState.setAnimation(0, SPINE_DEFAULT_ANIMATION, true);
+                else if (anims[0]) animState.setAnimation(0, anims[0], true);
+
+                console.log('[Spine] ✅ 加载完成 / skin:', availableSkins.join(','), '/ anim:', anims.join(','));
+
+                function centerSkeleton() {
+                    skeleton.scaleX = skeleton.scaleY = 1;
+                    skeleton.x = 0; skeleton.y = 0;
+                    skeleton.updateWorldTransform();
+                    const offset = new spine.Vector2();
+                    const size = new spine.Vector2();
+                    skeleton.getBounds(offset, size, []);
+                    const paddingX = canvas.width * 0.08;
+                    const paddingY = canvas.height * 0.04;
+                    const scale = Math.min(
+                        (canvas.width - paddingX * 2) / size.x,
+                        (canvas.height - paddingY * 2) / size.y
+                    );
+                    skeleton.scaleX = skeleton.scaleY = scale;
+                    skeleton.x = canvas.width / 2 - (offset.x + size.x / 2) * scale;
+                    skeleton.y = paddingY - offset.y * scale;
+                }
+
+                function resizeCanvas() {
+                    const dpr = window.devicePixelRatio || 1;
+                    const w = Math.floor(canvas.clientWidth * dpr);
+                    const h = Math.floor(canvas.clientHeight * dpr);
+                    if (canvas.width !== w || canvas.height !== h) {
+                        canvas.width = w; canvas.height = h;
+                        centerSkeleton();
+                    }
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                }
+
+                let lastTime = Date.now() / 1000;
+                function render() {
+                    resizeCanvas();
+                    const now = Date.now() / 1000;
+                    const delta = now - lastTime; lastTime = now;
+                    animState.update(delta);
+                    animState.apply(skeleton);
+                    skeleton.updateWorldTransform();
+                    gl.clearColor(0, 0, 0, 0);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                    mvp.ortho2d(0, 0, canvas.width, canvas.height);
+                    shader.bind();
+                    shader.setUniformi(spine.webgl.Shader.SAMPLER, 0);
+                    shader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
+                    batcher.begin(shader);
+                    renderer.draw(batcher, skeleton);
+                    batcher.end();
+                    shader.unbind();
+                    requestAnimationFrame(render);
+                }
+
+                window.spineApp = {
+                    setSkin(name) {
+                        if (!skeleton || !availableSkins.includes(name)) return false;
+                        skeleton.setSkinByName(name);
+                        skeleton.setSlotsToSetupPose();
+                        centerSkeleton();
+                        console.log('[Spine] skin →', name);
+                        return true;
+                    },
+                    skins: availableSkins
+                };
+
+                // v3: Spine 就绪后，重新应用一次性别 UI（覆盖初始 fallback 状态）
+                if (typeof applyGenderToUI === 'function') {
+                    applyGenderToUI(localStorage.getItem('userGender') || '');
+                }
+
+                // v3.1: canvas 可见后再首次 resize + center，避免 0×0 导致 scaleX=0
+                requestAnimationFrame(() => {
+                    resizeCanvas();
+                    centerSkeleton();
+                    requestAnimationFrame(render);
+                    console.log('[Spine] canvas size:', canvas.clientWidth, 'x', canvas.clientHeight);
+                });
+
+                if (switcher) {
+                    switcher.addEventListener('click', e => {
+                        const btn = e.target.closest('.skin-btn');
+                        if (!btn) return;
+                        const name = btn.dataset.skin;
+                        if (!window.spineApp.setSkin(name)) return;
+                        switcher.querySelectorAll('.skin-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    });
+                }
+            }
+
+            initSpine().catch(showFallback);
+        })();
+    </script>
+</body>
+</html>
